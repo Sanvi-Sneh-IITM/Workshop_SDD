@@ -51,6 +51,19 @@ class Task(Base):
     
     project = relationship("Project", back_populates="tasks")
     comments = relationship("Comment", back_populates="task", cascade="all, delete-orphan")
+    subtasks = relationship("Subtask", back_populates="task", cascade="all, delete-orphan")
+
+class Subtask(Base):
+    __tablename__ = "subtasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True)
+    description = Column(Text, nullable=True)
+    status = Column(Enum(TaskStatus), default=TaskStatus.TODO)
+    task_id = Column(Integer, ForeignKey("tasks.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    task = relationship("Task", back_populates="subtasks")
 
 class Comment(Base):
     __tablename__ = "comments"

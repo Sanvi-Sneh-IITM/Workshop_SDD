@@ -7,6 +7,7 @@ A lightweight FastAPI-based task and project management system.
 - ✅ User authentication (JWT)
 - 📁 Projects management
 - ✔️ Tasks with status tracking (todo, in_progress, done)
+- 📋 Subtasks under tasks (break down work into smaller items)
 - 💬 Comments on tasks
 - 🔍 Filter tasks by project and status
 - 📅 Due dates for tasks
@@ -86,6 +87,24 @@ curl -X POST "http://localhost:8000/comments" \
   }'
 ```
 
+### 6. Add a subtask
+```bash
+curl -X POST "http://localhost:8000/tasks/1/subtasks" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Draft outline",
+    "description": "First pass at structure",
+    "status": "todo"
+  }'
+```
+
+### 7. List subtasks for a task
+```bash
+curl -X GET "http://localhost:8000/tasks/1/subtasks" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
 ## API Endpoints
 
 ### Authentication
@@ -101,9 +120,16 @@ curl -X POST "http://localhost:8000/comments" \
 ### Tasks
 - `POST /tasks` - Create task
 - `GET /tasks` - List tasks (filter by `project_id` and `status`)
-- `GET /tasks/{id}` - Get task details
+- `GET /tasks/{id}` - Get task details (includes nested `subtasks`)
 - `PUT /tasks/{id}` - Update task
-- `DELETE /tasks/{id}` - Delete task
+- `DELETE /tasks/{id}` - Delete task (cascades subtasks)
+
+### Subtasks
+- `POST /tasks/{id}/subtasks` - Create subtask
+- `GET /tasks/{id}/subtasks` - List subtasks for a task
+- `GET /tasks/{id}/subtasks/{subtask_id}` - Get subtask details
+- `PUT /tasks/{id}/subtasks/{subtask_id}` - Update subtask
+- `DELETE /tasks/{id}/subtasks/{subtask_id}` - Delete subtask
 
 ### Comments
 - `POST /comments` - Add comment to task
@@ -130,7 +156,6 @@ curl -X POST "http://localhost:8000/comments" \
 - Add pagination for large datasets
 - Implement task assignments to multiple users
 - Add file attachments
-- Create subtasks functionality
 - Add search with filters
 - Implement WebSocket for real-time updates
 - Add email notifications

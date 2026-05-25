@@ -50,13 +50,46 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = None
     due_date: Optional[datetime] = None
 
+class TaskSummary(TaskBase):
+    id: int
+    project_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class Task(TaskBase):
     id: int
     project_id: int
     created_at: datetime
-    
+    subtasks: List["Subtask"] = []
+
     class Config:
         from_attributes = True
+
+# Subtask schemas
+class SubtaskBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: Optional[TaskStatus] = TaskStatus.TODO
+
+class SubtaskCreate(SubtaskBase):
+    pass
+
+class SubtaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[TaskStatus] = None
+
+class Subtask(SubtaskBase):
+    id: int
+    task_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+Task.model_rebuild()
 
 # Comment schemas
 class CommentBase(BaseModel):

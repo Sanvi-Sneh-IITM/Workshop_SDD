@@ -1,11 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from datetime import timedelta
 
 import schemas
-from database import get_db, init_db, User, Project, Task, Comment, TaskStatus
+from database import get_db, init_db, User, Project, Task, Comment, Subtask, TaskStatus
 from auth import (
     get_password_hash, 
     verify_password, 
@@ -106,8 +106,17 @@ def delete_project(
     db.commit()
     return {"message": "Project deleted"}
 
+def get_owned_task(task_id: int, db: Session, current_user: User) -> Task:
+    task = db.query(Task).join(Project).filter(
+        Task.id == task_id,
+        Project.owner_id == current_user.id
+    ).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
 # Task endpoints
-@app.post("/tasks", response_model=schemas.Task)
+@app.post("/tasks", response_model=schemas.TaskSummary)
 def create_task(
     task: schemas.TaskCreate,
     db: Session = Depends(get_db),
@@ -127,7 +136,7 @@ def create_task(
     db.refresh(new_task)
     return new_task
 
-@app.get("/tasks", response_model=List[schemas.Task])
+@app.get("/tasks", response_model=List[schemas.TaskSummary])
 def list_tasks(
     project_id: int = None,
     status: TaskStatus = None,
@@ -149,15 +158,19 @@ def get_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    task = db.query(Task).join(Project).filter(
-        Task.id == task_id,
-        Project.owner_id == current_user.id
-    ).first()
+    task = (
+        db.query(Task)
+        .options(joinedload(Task.subtasks))
+        .join(Project)
+        .filter(Task.id == task_id, Project.owner_id == current_user.id)
+        .first()
+    )
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    task.subtasks.sort(key=lambda s: s.created_at)
     return task
 
-@app.put("/tasks/{task_id}", response_model=schemas.Task)
+@app.put("/tasks/{task_id}", response_model=schemas.TaskSummary)
 def update_task(
     task_id: int,
     task_update: schemas.TaskUpdate,
@@ -232,6 +245,94 @@ def list_comments(
         raise HTTPException(status_code=404, detail="Task not found")
     
     return db.query(Comment).filter(Comment.task_id == task_id).all()
+
+# Subtask endpoints
+@app.post("/tasks/{task_id}/subtasks", response_model=schemas.Subtask, status_code=status.HTTP_201_CREATED)
+def create_subtask(
+    task_id: int,
+    subtask: schemas.SubtaskCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    get_owned_task(task_id, db, current_user)
+    new_subtask = Subtask(**subtask.dict(), task_id=task_id)
+    db.add(new_subtask)
+    db.commit()
+    db.refresh(new_subtask)
+    return new_subtask
+
+@app.get("/tasks/{task_id}/subtasks", response_model=List[schemas.Subtask])
+def list_subtasks(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    get_owned_task(task_id, db, current_user)
+    return (
+        db.query(Subtask)
+        .filter(Subtask.task_id == task_id)
+        .order_by(Subtask.created_at.asc())
+        .all()
+    )
+
+@app.get("/tasks/{task_id}/subtasks/{subtask_id}", response_model=schemas.Subtask)
+def get_subtask(
+    task_id: int,
+    subtask_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    get_owned_task(task_id, db, current_user)
+    subtask = db.query(Subtask).filter(
+        Subtask.id == subtask_id,
+        Subtask.task_id == task_id
+    ).first()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+    return subtask
+
+@app.put("/tasks/{task_id}/subtasks/{subtask_id}", response_model=schemas.Subtask)
+def update_subtask(
+    task_id: int,
+    subtask_id: int,
+    subtask_update: schemas.SubtaskUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    get_owned_task(task_id, db, current_user)
+    subtask = db.query(Subtask).filter(
+        Subtask.id == subtask_id,
+        Subtask.task_id == task_id
+    ).first()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+
+    update_data = subtask_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(subtask, field, value)
+
+    db.commit()
+    db.refresh(subtask)
+    return subtask
+
+@app.delete("/tasks/{task_id}/subtasks/{subtask_id}")
+def delete_subtask(
+    task_id: int,
+    subtask_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    get_owned_task(task_id, db, current_user)
+    subtask = db.query(Subtask).filter(
+        Subtask.id == subtask_id,
+        Subtask.task_id == task_id
+    ).first()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+
+    db.delete(subtask)
+    db.commit()
+    return {"message": "Subtask deleted"}
 
 @app.get("/")
 def root():
